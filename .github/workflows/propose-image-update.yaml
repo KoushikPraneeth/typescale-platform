@@ -94,7 +94,7 @@ jobs:
 
           pr_number="$(gh pr list --head "$branch" --state open --json number --jq '.[0].number')"
           title="chore: update TypeScale image to ${IMAGE_TAG:0:12}"
-          body="Updates the approved TypeScale image to commit \`${IMAGE_TAG}\` and immutable digest \`${IMAGE_DIGEST}\`.\n\nThe proposal job verified the chart with strict Helm linting and pinned kubeconform. Argo CD remains the only deployment reconciler."
+          printf -v body 'Updates the approved TypeScale image to commit `%s` and immutable digest `%s`.\n\nThe proposal job verified the chart with strict Helm linting and pinned kubeconform. Argo CD remains the only deployment reconciler.' "$IMAGE_TAG" "$IMAGE_DIGEST"
 
           if [[ -z "$pr_number" ]]; then
             gh pr create \
