@@ -27,6 +27,31 @@ charts/typescale/         # deployable TypeScale Helm chart
 
 GitHub Actions does **not** deploy the application. Argo CD is the only deployment reconciler.
 
+The scheduled `Propose TypeScale image update` workflow discovers the newest successful
+`typescale-app` main-branch build, resolves its registry digest, validates the rendered
+release, and opens a pull request. It never changes the cluster directly and never
+auto-merges the proposal.
+
+The original hand-applied `typescale` namespace was deleted before the GitOps bootstrap.
+This explicit ownership transfer prevents two controllers or two LoadBalancer Services
+from managing competing copies of the same workload.
+
+## Propose an image update
+
+The workflow runs every six hours and can also be started manually:
+
+```bash
+gh workflow run propose-image-update.yaml \
+  --repo KoushikPraneeth/typescale-platform
+```
+
+If the latest successful application image is already approved, the run exits without
+creating a branch. Otherwise it creates or refreshes one stable reviewable pull request
+containing only the immutable tag and digest update. A newer proposal supersedes the old
+one instead of leaving rollback-prone stale image PRs open. The proposal job performs the
+same strict Helm and kubeconform validation itself because GitHub suppresses new workflow
+events created with the repository `GITHUB_TOKEN`.
+
 ## Validate locally
 
 ```bash

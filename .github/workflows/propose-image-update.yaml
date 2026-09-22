@@ -1,0 +1,107 @@
+name: Propose TypeScale image update
+
+on:
+  schedule:
+    - cron: "17 */6 * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: typescale-image-update
+  cancel-in-progress: false
+
+jobs:
+  propose:
+    name: Propose immutable image update
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: write
+      pull-requests: write
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          fetch-depth: 0
+
+      - name: Set up Helm
+        uses: azure/setup-helm@1a275c3b69536ee54be43f2070a358922e12c8d4 # v4.3.1
+        with:
+          version: v4.3.0
+
+      - name: Resolve latest successfully published image
+        id: image
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          tag="$(gh api \
+            'repos/KoushikPraneeth/typescale-app/actions/workflows/ci.yaml/runs?branch=main&event=push&status=success&per_page=1' \
+            --jq '.workflow_runs[0].head_sha')"
+          test -n "$tag"
+          test "${#tag}" -eq 40
+
+          image="ghcr.io/koushikpraneeth/typescale:${tag}"
+          digest="$(docker buildx imagetools inspect "$image" --format '{{.Manifest.Digest}}')"
+          test -n "$digest"
+
+          current_tag="$(python3 -c 'import pathlib,re; text=pathlib.Path("charts/typescale/values-gitops.yaml").read_text(); print(re.search(r"(?m)^    tag: ([0-9a-f]{40})$", text).group(1))')"
+          current_digest="$(python3 -c 'import pathlib,re; text=pathlib.Path("charts/typescale/values-gitops.yaml").read_text(); print(re.search(r"(?m)^    digest: (sha256:[0-9a-f]{64})$", text).group(1))')"
+
+          if [[ "$tag" == "$current_tag" && "$digest" == "$current_digest" ]]; then
+            echo 'changed=false' >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          echo 'changed=true' >> "$GITHUB_OUTPUT"
+          echo "tag=$tag" >> "$GITHUB_OUTPUT"
+          echo "digest=$digest" >> "$GITHUB_OUTPUT"
+
+      - name: Update and validate GitOps values
+        if: steps.image.outputs.changed == 'true'
+        run: |
+          set -euo pipefail
+          python3 scripts/update_image.py \
+            --file charts/typescale/values-gitops.yaml \
+            --tag '${{ steps.image.outputs.tag }}' \
+            --digest '${{ steps.image.outputs.digest }}'
+          helm lint --strict charts/typescale -f charts/typescale/values-gitops.yaml
+          helm template typescale charts/typescale \
+            --namespace typescale-gitops \
+            -f charts/typescale/values-gitops.yaml \
+            > /tmp/typescale.yaml
+          docker run --rm -i \
+            ghcr.io/yannh/kubeconform:v0.7.0@sha256:85dbef6b4b312b99133decc9c6fc9495e9fc5f92293d4ff3b7e1b30f5611823c \
+            -strict -summary -kubernetes-version 1.31.0 - < /tmp/typescale.yaml
+
+      - name: Open update pull request
+        if: steps.image.outputs.changed == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          IMAGE_TAG: ${{ steps.image.outputs.tag }}
+          IMAGE_DIGEST: ${{ steps.image.outputs.digest }}
+        run: |
+          set -euo pipefail
+          branch='automation/typescale-image'
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git switch -C "$branch"
+          git add charts/typescale/values-gitops.yaml
+          git commit -m "chore: propose TypeScale image ${IMAGE_TAG:0:12}"
+          git push --force-with-lease --set-upstream origin "$branch"
+
+          pr_number="$(gh pr list --head "$branch" --state open --json number --jq '.[0].number')"
+          title="chore: update TypeScale image to ${IMAGE_TAG:0:12}"
+          body="Updates the approved TypeScale image to commit \`${IMAGE_TAG}\` and immutable digest \`${IMAGE_DIGEST}\`.\n\nThe proposal job verified the chart with strict Helm linting and pinned kubeconform. Argo CD remains the only deployment reconciler."
+
+          if [[ -z "$pr_number" ]]; then
+            gh pr create \
+              --base main \
+              --head "$branch" \
+              --title "$title" \
+              --body "$body"
+          else
+            gh pr edit "$pr_number" --title "$title" --body "$body"
+          fi

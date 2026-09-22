@@ -37,4 +37,5 @@ jobs:
       - name: Validate GitOps configuration
         run: |
           python3 -m pip install --disable-pip-version-check PyYAML==6.0.3
+          python3 -m py_compile scripts/update_image.py
           python3 -c 'import re,yaml; values=yaml.safe_load(open("charts/typescale/values-gitops.yaml")); image=values["app"]["image"]; assert re.fullmatch(r"[0-9a-f]{40}", image["tag"]); assert re.fullmatch(r"sha256:[0-9a-f]{64}", image["digest"]); apps=[yaml.safe_load(open(path)) for path in ("argocd/bootstrap.yaml", "argocd/applications/typescale.yaml")]; assert all(app["apiVersion"] == "argoproj.io/v1alpha1" and app["kind"] == "Application" for app in apps); assert apps[1]["spec"]["syncPolicy"]["automated"]["prune"] is True; assert apps[1]["spec"]["syncPolicy"]["automated"]["selfHeal"] is True'
