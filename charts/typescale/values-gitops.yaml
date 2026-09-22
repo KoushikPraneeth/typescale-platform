@@ -1,0 +1,12 @@
+app:
+  replicaCount: 2
+  image:
+    repository: ghcr.io/koushikpraneeth/typescale
+    tag: 352b1963aca09cd9cac48e24194f3a145f699017
+    digest: sha256:e8accf69686709eacd27ba5726fcc7fd5c5315b9df3f2b270aa63a8a6ec153f7
+    pullPolicy: IfNotPresent
+  namespacePrefix: typescale:gitops
+  publicService:
+    enabled: true
+    type: LoadBalancer
+    port: 80
