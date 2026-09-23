@@ -39,6 +39,11 @@ grafana.ini:
     check_for_updates: false
   news:
     news_feed_enabled: false
+  plugins:
+    plugin_admin_enabled: false
+    plugin_catalog_hidden_plugins: all
+
+plugins: []
 
 datasources:
   datasources.yaml:
