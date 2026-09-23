@@ -122,3 +122,20 @@ kubectl port-forward service/argocd-server -n argocd 8080:80
 ```
 
 Argo CD is intentionally a private `ClusterIP`. Dex, notifications, and the ApplicationSet controller are disabled to stay within an 8 GB local-machine budget.
+
+## Verified local demonstration
+
+The complete OrbStack path was exercised after platform PR #5 merged:
+
+- Prometheus discovered exactly two healthy `typescale-pods` targets and the idle aggregate was `0`.
+- Grafana reported a healthy database and loaded the Git-provisioned Prometheus datasource and `typescale-overview` dashboard.
+- KEDA reported `Ready=True`, `Fallback=False`, and created an HPA with a 2–5 replica range.
+- The synthetic loader opened and held 40 WebSockets with `40` successful clients and `0` failures.
+- Prometheus returned an aggregate active-connection value of `40`.
+- KEDA scaled the TypeScale Deployment from two to five ready replicas.
+- After the clients closed, the metric returned to zero and the configured stabilization reduced replicas gradually back to two.
+- Every Argo CD Application finished `Synced` and `Healthy`, and the public readiness endpoint remained healthy.
+
+This proves the local monitoring and demand-scaling path. It does not imply production
+durability: Prometheus and Redis are ephemeral, and existing WebSockets disconnect if the
+pod holding them is terminated.
