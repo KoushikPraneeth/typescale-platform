@@ -1,31 +1,28 @@
 apiVersion: argoproj.io/v1alpha1
 kind: Application
 metadata:
-  name: typescale
+  name: grafana
   namespace: argocd
   annotations:
-    argocd.argoproj.io/sync-wave: "1"
+    argocd.argoproj.io/sync-wave: "0"
   finalizers:
     - resources-finalizer.argocd.argoproj.io
 spec:
   project: default
-  source:
-    repoURL: https://github.com/KoushikPraneeth/typescale-platform.git
-    targetRevision: main
-    path: charts/typescale
-    helm:
-      releaseName: typescale
-      valueFiles:
-        - values-gitops.yaml
+  sources:
+    - repoURL: https://grafana-community.github.io/helm-charts
+      chart: grafana
+      targetRevision: 13.2.5
+      helm:
+        releaseName: grafana
+        valueFiles:
+          - $values/monitoring/grafana-values.yaml
+    - repoURL: https://github.com/KoushikPraneeth/typescale-platform.git
+      targetRevision: main
+      ref: values
   destination:
     server: https://kubernetes.default.svc
-    namespace: typescale-gitops
-  ignoreDifferences:
-    - group: apps
-      kind: Deployment
-      name: typescale-app
-      jsonPointers:
-        - /spec/replicas
+    namespace: monitoring
   syncPolicy:
     automated:
       enabled: true
@@ -41,6 +38,5 @@ spec:
     syncOptions:
       - CreateNamespace=true
       - PruneLast=true
-      - RespectIgnoreDifferences=true
       - ServerSideApply=true
   revisionHistoryLimit: 3

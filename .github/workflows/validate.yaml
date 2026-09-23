@@ -23,19 +23,109 @@ jobs:
         with:
           version: v4.3.0
 
-      - name: Validate Helm release
+      - name: Add pinned chart repositories
+        run: |
+          helm repo add prometheus-community https://prometheus-community.github.io/helm-charts
+          helm repo add grafana-community https://grafana-community.github.io/helm-charts
+          helm repo add kedacore https://kedacore.github.io/charts
+          helm repo update
+
+      - name: Render platform releases
         run: |
           helm lint --strict charts/typescale -f charts/typescale/values-gitops.yaml
           helm template typescale charts/typescale \
             --namespace typescale-gitops \
             -f charts/typescale/values-gitops.yaml \
             > /tmp/typescale.yaml
+          helm template prometheus prometheus-community/prometheus \
+            --version 29.31.1 \
+            --namespace monitoring \
+            -f monitoring/prometheus-values.yaml \
+            > /tmp/prometheus.yaml
+          helm template grafana grafana-community/grafana \
+            --version 13.2.5 \
+            --namespace monitoring \
+            -f monitoring/grafana-values.yaml \
+            > /tmp/grafana.yaml
+          helm template keda kedacore/keda \
+            --version 2.20.2 \
+            --namespace keda \
+            -f monitoring/keda-values.yaml \
+            > /tmp/keda.yaml
+
+      - name: Validate Kubernetes resources
+        run: |
+          for manifest in /tmp/prometheus.yaml /tmp/grafana.yaml; do
+            docker run --rm -i \
+              ghcr.io/yannh/kubeconform:v0.7.0@sha256:85dbef6b4b312b99133decc9c6fc9495e9fc5f92293d4ff3b7e1b30f5611823c \
+              -strict -summary -kubernetes-version 1.31.0 - < "$manifest"
+          done
           docker run --rm -i \
             ghcr.io/yannh/kubeconform:v0.7.0@sha256:85dbef6b4b312b99133decc9c6fc9495e9fc5f92293d4ff3b7e1b30f5611823c \
-            -strict -summary -kubernetes-version 1.31.0 - < /tmp/typescale.yaml
+            -strict -summary -kubernetes-version 1.31.0 \
+            -schema-location default \
+            -schema-location 'https://raw.githubusercontent.com/datreeio/CRDs-catalog/ad3b08c5045129d7bb1eeffd8e61719b2c8dd1e2/{{.Group}}/{{.ResourceKind}}_{{.ResourceAPIVersion}}.json' \
+            - < /tmp/typescale.yaml
+          docker run --rm -i \
+            ghcr.io/yannh/kubeconform:v0.7.0@sha256:85dbef6b4b312b99133decc9c6fc9495e9fc5f92293d4ff3b7e1b30f5611823c \
+            -strict -summary -kubernetes-version 1.31.0 \
+            -skip=CustomResourceDefinition - < /tmp/keda.yaml
 
-      - name: Validate GitOps configuration
+      - name: Validate GitOps and monitoring configuration
         run: |
           python3 -m pip install --disable-pip-version-check PyYAML==6.0.3
           python3 -m py_compile scripts/update_image.py
-          python3 -c 'import re,yaml; values=yaml.safe_load(open("charts/typescale/values-gitops.yaml")); image=values["app"]["image"]; assert re.fullmatch(r"[0-9a-f]{40}", image["tag"]); assert re.fullmatch(r"sha256:[0-9a-f]{64}", image["digest"]); apps=[yaml.safe_load(open(path)) for path in ("argocd/bootstrap.yaml", "argocd/applications/typescale.yaml")]; assert all(app["apiVersion"] == "argoproj.io/v1alpha1" and app["kind"] == "Application" for app in apps); assert apps[1]["spec"]["syncPolicy"]["automated"]["prune"] is True; assert apps[1]["spec"]["syncPolicy"]["automated"]["selfHeal"] is True'
+          python3 - <<'PY'
+          import json
+          import pathlib
+          import re
+          import yaml
+
+          values = yaml.safe_load(open("charts/typescale/values-gitops.yaml"))
+          image = values["app"]["image"]
+          assert re.fullmatch(r"[0-9a-f]{40}", image["tag"])
+          assert re.fullmatch(r"sha256:[0-9a-f]{64}", image["digest"])
+          assert image["tag"] == "389691c78f7e4fb1fbc505f9e1386fcee8006246"
+
+          applications = {}
+          for path in pathlib.Path("argocd/applications").glob("*.yaml"):
+              application = yaml.safe_load(path.read_text())
+              assert application["apiVersion"] == "argoproj.io/v1alpha1"
+              assert application["kind"] == "Application"
+              assert application["spec"]["syncPolicy"]["automated"]["prune"] is True
+              assert application["spec"]["syncPolicy"]["automated"]["selfHeal"] is True
+              applications[application["metadata"]["name"]] = application
+          assert set(applications) == {"grafana", "keda", "prometheus", "typescale"}
+          assert applications["prometheus"]["spec"]["sources"][0]["targetRevision"] == "29.31.1"
+          assert applications["grafana"]["spec"]["sources"][0]["targetRevision"] == "13.2.5"
+          assert applications["keda"]["spec"]["sources"][0]["targetRevision"] == "2.20.2"
+          typescale_app = applications["typescale"]
+          assert "RespectIgnoreDifferences=true" in typescale_app["spec"]["syncPolicy"]["syncOptions"]
+          assert typescale_app["spec"]["ignoreDifferences"] == [{"group": "apps", "kind": "Deployment", "name": "typescale-app", "jsonPointers": ["/spec/replicas"]}]
+
+          with open("/tmp/typescale.yaml") as stream:
+              typescale_resources = [doc for doc in yaml.safe_load_all(stream) if doc]
+          scaled_object = next(doc for doc in typescale_resources if doc["kind"] == "ScaledObject")
+          deployment = next(doc for doc in typescale_resources if doc["kind"] == "Deployment" and doc["metadata"]["labels"].get("app.kubernetes.io/component") == "application")
+          assert "replicas" not in deployment["spec"]
+          container = deployment["spec"]["template"]["spec"]["containers"][0]
+          assert container["image"] == f'{image["repository"]}@{image["digest"]}'
+          assert {entry["name"]: entry.get("value") for entry in container["env"]}["METRICS_PORT"] == "9090"
+          assert scaled_object["spec"]["minReplicaCount"] == 2
+          assert scaled_object["spec"]["maxReplicaCount"] == 5
+
+          rendered = {}
+          for name in ("prometheus", "grafana", "keda"):
+              with open(f"/tmp/{name}.yaml") as stream:
+                  rendered[name] = [doc for doc in yaml.safe_load_all(stream) if doc]
+          assert not any(doc["kind"] == "DaemonSet" for doc in rendered["prometheus"])
+          assert not any(doc["kind"] == "PersistentVolumeClaim" for name in ("prometheus", "grafana") for doc in rendered[name])
+          assert all(doc["spec"].get("type", "ClusterIP") == "ClusterIP" for name in ("prometheus", "grafana") for doc in rendered[name] if doc["kind"] == "Service")
+          prometheus_config = "\n".join(str(doc.get("data", {})) for doc in rendered["prometheus"] if doc["kind"] == "ConfigMap")
+          assert "job_name: typescale-pods" in prometheus_config
+          assert "typescale-gitops" in prometheus_config
+          grafana_configmaps = [doc for doc in rendered["grafana"] if doc["kind"] == "ConfigMap"]
+          dashboard_json = next(value for doc in grafana_configmaps for key, value in doc.get("data", {}).items() if key.endswith(".json"))
+          assert json.loads(dashboard_json)["uid"] == "typescale-overview"
+          assert sum(doc["kind"] == "Deployment" for doc in rendered["keda"]) == 3
+          PY

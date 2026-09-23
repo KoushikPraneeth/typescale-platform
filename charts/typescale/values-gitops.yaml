@@ -2,10 +2,31 @@ app:
   replicaCount: 2
   image:
     repository: ghcr.io/koushikpraneeth/typescale
-    tag: 23e3f35c83c41b4aca7f4462082a3df9b0b4f812
-    digest: sha256:9665cd5a4e1e972e3bdf812658487e893253f848c2047983084979cf8119ed47
+    tag: 389691c78f7e4fb1fbc505f9e1386fcee8006246
+    digest: sha256:e1e703adcd2da1f293624d29ba5cec378fe875ef3caf411de4568cc3a0aed222
     pullPolicy: IfNotPresent
   namespacePrefix: typescale:gitops
+  metrics:
+    enabled: true
+    path: /metrics
+    port: 9090
+    allowedNamespace: monitoring
+  autoscaling:
+    enabled: true
+    minReplicaCount: 2
+    maxReplicaCount: 5
+    pollingInterval: 15
+    cooldownPeriod: 300
+    fallback:
+      failureThreshold: 3
+      replicas: 5
+      behavior: static
+    prometheus:
+      serverAddress: http://prometheus-server.monitoring.svc.cluster.local
+      jobName: typescale-pods
+      query: ""
+      threshold: "8"
+      activationThreshold: "1"
   publicService:
     enabled: true
     type: LoadBalancer
