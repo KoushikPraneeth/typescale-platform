@@ -1,0 +1,173 @@
+replicas: 1
+
+automountServiceAccountToken: false
+rbac:
+  create: false
+serviceAccount:
+  create: false
+
+testFramework:
+  enabled: false
+
+admin:
+  existingSecret: grafana-admin
+  userKey: admin-user
+  passwordKey: admin-password
+
+service:
+  type: ClusterIP
+
+persistence:
+  enabled: false
+
+resources:
+  requests:
+    cpu: 50m
+    memory: 128Mi
+    ephemeral-storage: 64Mi
+  limits:
+    cpu: 300m
+    memory: 384Mi
+    ephemeral-storage: 512Mi
+
+grafana.ini:
+  auth.anonymous:
+    enabled: true
+    org_role: Viewer
+  analytics:
+    reporting_enabled: false
+    check_for_updates: false
+  news:
+    news_feed_enabled: false
+
+datasources:
+  datasources.yaml:
+    apiVersion: 1
+    datasources:
+      - name: Prometheus
+        uid: prometheus
+        type: prometheus
+        access: proxy
+        url: http://prometheus-server.monitoring.svc.cluster.local
+        isDefault: true
+        editable: false
+        jsonData:
+          timeInterval: 15s
+
+dashboardProviders:
+  dashboardproviders.yaml:
+    apiVersion: 1
+    providers:
+      - name: default
+        orgId: 1
+        folder: TypeScale
+        type: file
+        disableDeletion: true
+        editable: false
+        options:
+          path: /var/lib/grafana/dashboards/default
+
+dashboards:
+  default:
+    typescale-overview:
+      json: |
+        {
+          "annotations": {"list": []},
+          "editable": false,
+          "graphTooltip": 1,
+          "panels": [
+            {
+              "datasource": {"type": "prometheus", "uid": "prometheus"},
+              "fieldConfig": {"defaults": {"unit": "short"}},
+              "gridPos": {"h": 5, "w": 6, "x": 0, "y": 0},
+              "id": 1,
+              "options": {"colorMode": "value", "graphMode": "area", "justifyMode": "auto", "textMode": "auto"},
+              "targets": [{"expr": "sum(typescale_websocket_connections)", "legendFormat": "connections", "refId": "A"}],
+              "title": "Active WebSockets",
+              "type": "stat"
+            },
+            {
+              "datasource": {"type": "prometheus", "uid": "prometheus"},
+              "fieldConfig": {"defaults": {"unit": "short"}},
+              "gridPos": {"h": 5, "w": 6, "x": 6, "y": 0},
+              "id": 2,
+              "options": {"colorMode": "value", "graphMode": "none", "justifyMode": "auto", "textMode": "auto"},
+              "targets": [{"expr": "count(up{job=\"typescale-pods\"} == 1)", "legendFormat": "ready targets", "refId": "A"}],
+              "title": "Scraped App Pods",
+              "type": "stat"
+            },
+            {
+              "datasource": {"type": "prometheus", "uid": "prometheus"},
+              "fieldConfig": {"defaults": {"unit": "reqps"}},
+              "gridPos": {"h": 5, "w": 6, "x": 12, "y": 0},
+              "id": 3,
+              "options": {"colorMode": "value", "graphMode": "area", "justifyMode": "auto", "textMode": "auto"},
+              "targets": [{"expr": "sum(rate(typescale_http_requests_total[1m]))", "legendFormat": "requests", "refId": "A"}],
+              "title": "HTTP Request Rate",
+              "type": "stat"
+            },
+            {
+              "datasource": {"type": "prometheus", "uid": "prometheus"},
+              "fieldConfig": {"defaults": {"unit": "s"}},
+              "gridPos": {"h": 5, "w": 6, "x": 18, "y": 0},
+              "id": 4,
+              "options": {"colorMode": "value", "graphMode": "area", "justifyMode": "auto", "textMode": "auto"},
+              "targets": [{"expr": "histogram_quantile(0.95, sum by (le) (rate(typescale_http_request_duration_seconds_bucket[5m])))", "legendFormat": "p95", "refId": "A"}],
+              "title": "HTTP p95 Latency",
+              "type": "stat"
+            },
+            {
+              "datasource": {"type": "prometheus", "uid": "prometheus"},
+              "fieldConfig": {"defaults": {"unit": "short"}},
+              "gridPos": {"h": 8, "w": 12, "x": 0, "y": 5},
+              "id": 5,
+              "options": {"legend": {"displayMode": "table", "placement": "bottom", "showLegend": true}},
+              "targets": [{"expr": "typescale_websocket_connections", "legendFormat": "{{pod}}", "refId": "A"}],
+              "title": "Active WebSockets by Pod",
+              "type": "timeseries"
+            },
+            {
+              "datasource": {"type": "prometheus", "uid": "prometheus"},
+              "fieldConfig": {"defaults": {"unit": "ops"}},
+              "gridPos": {"h": 8, "w": 12, "x": 12, "y": 5},
+              "id": 6,
+              "options": {"legend": {"displayMode": "table", "placement": "bottom", "showLegend": true}},
+              "targets": [
+                {"expr": "sum(rate(typescale_races_started_total[5m]))", "legendFormat": "started", "refId": "A"},
+                {"expr": "sum(rate(typescale_races_finished_total[5m]))", "legendFormat": "finished", "refId": "B"},
+                {"expr": "sum(rate(typescale_progress_updates_total[5m]))", "legendFormat": "progress updates", "refId": "C"}
+              ],
+              "title": "Race Activity",
+              "type": "timeseries"
+            },
+            {
+              "datasource": {"type": "prometheus", "uid": "prometheus"},
+              "fieldConfig": {"defaults": {"unit": "reqps"}},
+              "gridPos": {"h": 8, "w": 12, "x": 0, "y": 13},
+              "id": 7,
+              "options": {"legend": {"displayMode": "table", "placement": "bottom", "showLegend": true}},
+              "targets": [{"expr": "sum by (route, status) (rate(typescale_http_requests_total[5m]))", "legendFormat": "{{route}} {{status}}", "refId": "A"}],
+              "title": "HTTP Requests by Route and Status",
+              "type": "timeseries"
+            },
+            {
+              "datasource": {"type": "prometheus", "uid": "prometheus"},
+              "fieldConfig": {"defaults": {"unit": "short"}},
+              "gridPos": {"h": 8, "w": 12, "x": 12, "y": 13},
+              "id": 8,
+              "options": {"legend": {"displayMode": "table", "placement": "bottom", "showLegend": true}},
+              "targets": [{"expr": "sum by (operation) (increase(typescale_redis_errors_total[5m]))", "legendFormat": "{{operation}}", "refId": "A"}],
+              "title": "Redis Errors (5m)",
+              "type": "timeseries"
+            }
+          ],
+          "refresh": "15s",
+          "schemaVersion": 41,
+          "tags": ["typescale", "local"],
+          "templating": {"list": []},
+          "time": {"from": "now-30m", "to": "now"},
+          "timezone": "browser",
+          "title": "TypeScale Overview",
+          "uid": "typescale-overview",
+          "version": 1
+        }

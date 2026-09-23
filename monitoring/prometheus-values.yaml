@@ -1,0 +1,78 @@
+alertmanager:
+  enabled: false
+kube-state-metrics:
+  enabled: false
+prometheus-node-exporter:
+  enabled: false
+prometheus-pushgateway:
+  enabled: false
+
+configmapReload:
+  prometheus:
+    resources:
+      requests:
+        cpu: 10m
+        memory: 32Mi
+        ephemeral-storage: 16Mi
+      limits:
+        cpu: 100m
+        memory: 64Mi
+        ephemeral-storage: 64Mi
+
+server:
+  global:
+    scrape_interval: 15s
+    scrape_timeout: 10s
+    evaluation_interval: 15s
+  persistentVolume:
+    enabled: false
+  retention: 6h
+  retentionSize: 1GB
+  service:
+    type: ClusterIP
+  resources:
+    requests:
+      cpu: 200m
+      memory: 384Mi
+      ephemeral-storage: 256Mi
+    limits:
+      cpu: "1"
+      memory: 1Gi
+      ephemeral-storage: 2Gi
+
+scrapeConfigs:
+  prometheus:
+    enabled: false
+  kubernetes-api-servers:
+    enabled: false
+  kubernetes-nodes:
+    enabled: false
+  kubernetes-nodes-cadvisor:
+    enabled: false
+  kubernetes-service-endpoints:
+    enabled: false
+  kubernetes-service-endpoints-slow:
+    enabled: false
+  prometheus-pushgateway:
+    enabled: false
+  kubernetes-services:
+    enabled: false
+  kubernetes-pods:
+    enabled: true
+    job_name: typescale-pods
+    honor_labels: false
+    kubernetes_sd_configs:
+      - role: pod
+        namespaces:
+          names:
+            - typescale-gitops
+    pre_relabel_configs: |
+      - source_labels: [__meta_kubernetes_pod_label_app_kubernetes_io_name]
+        action: keep
+        regex: typescale
+      - source_labels: [__meta_kubernetes_pod_label_app_kubernetes_io_component]
+        action: keep
+        regex: application
+    post_relabel_configs: ""
+  kubernetes-pods-slow:
+    enabled: false

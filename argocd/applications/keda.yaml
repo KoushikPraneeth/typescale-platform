@@ -1,31 +1,28 @@
 apiVersion: argoproj.io/v1alpha1
 kind: Application
 metadata:
-  name: typescale
+  name: keda
   namespace: argocd
   annotations:
-    argocd.argoproj.io/sync-wave: "1"
+    argocd.argoproj.io/sync-wave: "-2"
   finalizers:
     - resources-finalizer.argocd.argoproj.io
 spec:
   project: default
-  source:
-    repoURL: https://github.com/KoushikPraneeth/typescale-platform.git
-    targetRevision: main
-    path: charts/typescale
-    helm:
-      releaseName: typescale
-      valueFiles:
-        - values-gitops.yaml
+  sources:
+    - repoURL: https://kedacore.github.io/charts
+      chart: keda
+      targetRevision: 2.20.2
+      helm:
+        releaseName: keda
+        valueFiles:
+          - $values/monitoring/keda-values.yaml
+    - repoURL: https://github.com/KoushikPraneeth/typescale-platform.git
+      targetRevision: main
+      ref: values
   destination:
     server: https://kubernetes.default.svc
-    namespace: typescale-gitops
-  ignoreDifferences:
-    - group: apps
-      kind: Deployment
-      name: typescale-app
-      jsonPointers:
-        - /spec/replicas
+    namespace: keda
   syncPolicy:
     automated:
       enabled: true
@@ -41,6 +38,5 @@ spec:
     syncOptions:
       - CreateNamespace=true
       - PruneLast=true
-      - RespectIgnoreDifferences=true
       - ServerSideApply=true
   revisionHistoryLimit: 3

@@ -5,8 +5,7 @@ GitOps and infrastructure configuration for [TypeScale](https://github.com/Koush
 ## Environment boundaries
 
 - **OrbStack Kubernetes** is the primary runtime for TypeScale, Argo CD, monitoring, and autoscaling.
-- **Floci AZ** will be a separate Azure API/Terraform compatibility test environment. It is not the application runtime and is not equivalent to Azure.
-- **Real Azure** remains a future validation target; no paid Azure subscription is required for this local platform.
+- **Azure and Floci are intentionally out of scope for this milestone.** No cloud deployment is created or required.
 
 ## Repository layout
 
@@ -16,6 +15,7 @@ argocd/
   applications/           # continuously reconciled Argo CD Applications
   install/values.yaml     # lightweight local Argo CD configuration
 charts/typescale/         # deployable TypeScale Helm chart
+monitoring/               # pinned Prometheus, Grafana, and KEDA values
 ```
 
 ## Delivery ownership
@@ -61,6 +61,11 @@ helm template typescale charts/typescale \
   -f charts/typescale/values-gitops.yaml
 ```
 
+CI also renders the pinned Prometheus `29.31.1`, Grafana `13.2.5`, and KEDA `2.20.2`
+charts. Prometheus scrapes only annotated TypeScale application pods in
+`typescale-gitops`; Alertmanager, kube-state-metrics, node-exporter, Pushgateway,
+and persistent storage are disabled for the 8 GB local environment.
+
 ## Install lightweight Argo CD
 
 ```bash
@@ -78,11 +83,40 @@ helm upgrade --install argocd argo/argo-cd \
 kubectl apply -f argocd/bootstrap.yaml
 ```
 
+Before the first Grafana reconciliation, create its admin Secret locally without placing
+the generated password in Git. In Fish:
+
+```fish
+kubectl create namespace monitoring --dry-run=client -o yaml | kubectl apply -f -
+set -l grafana_password (openssl rand -hex 24)
+kubectl create secret generic grafana-admin \
+  --namespace monitoring \
+  --from-literal=admin-user=admin \
+  --from-literal="admin-password=$grafana_password"
+set -e grafana_password
+```
+
+The dashboard is available anonymously as read-only over a local port-forward. Prometheus
+and Grafana remain private `ClusterIP` Services:
+
+```bash
+kubectl port-forward service/prometheus-server -n monitoring 9090:80
+kubectl port-forward service/grafana -n monitoring 3000:80
+```
+
+Grafana provisions the Prometheus datasource and the **TypeScale Overview** dashboard from
+Git. KEDA watches only `typescale-gitops`. The approved TypeScale values enable a
+Prometheus-backed `ScaledObject` with a two-replica minimum and five-replica maximum.
+Argo CD ignores `/spec/replicas` and respects that ignore during sync so KEDA/HPA owns
+replica changes without hiding drift in any other Deployment field.
+
 Inspect reconciliation without exposing Argo CD publicly:
 
 ```bash
 kubectl get applications -n argocd
 kubectl get pods -n argocd
+kubectl get pods -n monitoring
+kubectl get pods -n keda
 kubectl get pods -n typescale-gitops
 kubectl port-forward service/argocd-server -n argocd 8080:80
 ```
