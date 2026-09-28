@@ -89,7 +89,7 @@ resource "azurerm_container_app" "typescale" {
 
   secret {
     name  = "redis-url"
-    value = "rediss://:${azurerm_managed_redis.typescale.default_database[0].primary_access_key}@${azurerm_managed_redis.typescale.hostname}:${azurerm_managed_redis.typescale.default_database[0].port}/0"
+    value = "rediss://:${urlencode(azurerm_managed_redis.typescale.default_database[0].primary_access_key)}@${azurerm_managed_redis.typescale.hostname}:${azurerm_managed_redis.typescale.default_database[0].port}/0"
   }
 
   template {
