@@ -6,6 +6,7 @@ GitOps and infrastructure configuration for [TypeScale](https://github.com/Koush
 
 - **OrbStack Kubernetes** is the primary runtime for TypeScale, Argo CD, monitoring, and autoscaling.
 - **Azure is a temporary validation path, not the permanent runtime.** The staged Container Apps run and its teardown evidence are recorded in [`docs/benchmarks/azure-container-apps.md`](docs/benchmarks/azure-container-apps.md). AKS cloud validation and Terraform automation remain separate future milestones.
+- The current local full-race load evidence is recorded in [`docs/benchmarks/local-websocket-races.md`](docs/benchmarks/local-websocket-races.md).
 
 ## Repository layout
 
