@@ -40,6 +40,16 @@ variable "github_repo" {
   default = "typescale-platform"
 }
 
+variable "github_owner_id" {
+  type    = string
+  default = "94680295"
+}
+
+variable "github_repository_id" {
+  type    = string
+  default = "1381368356"
+}
+
 variable "github_environment" {
   type    = string
   default = "azure-demo"
@@ -90,7 +100,7 @@ resource "azurerm_federated_identity_credential" "github_environment" {
   name                      = "github-azure-demo"
   user_assigned_identity_id = azurerm_user_assigned_identity.github_actions.id
   issuer                    = "https://token.actions.githubusercontent.com"
-  subject                   = "repo:${var.github_owner}/${var.github_repo}:environment:${var.github_environment}"
+  subject                   = "repo:${var.github_owner}@${var.github_owner_id}/${var.github_repo}@${var.github_repository_id}:environment:${var.github_environment}"
   audience                  = ["api://AzureADTokenExchange"]
 }
 
