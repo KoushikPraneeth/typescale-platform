@@ -25,7 +25,7 @@
 
 Latency is measured from `join_sent_at` to `room_joined_at`; it is not end-to-end race duration. This is a local single-node development cluster result, not a production SLO or cloud result. The benchmark demonstrates the game flow and scale-out under synthetic load; it does not claim resilience to node or Redis failure.
 
-A separate 420-second held-WebSocket run also completed 40/40 connections with zero failures and reached five replicas; it did not type to finish races. The completed-race test is the better functional evidence. Scale-in is expected after KEDA cooldown and HPA stabilization; the final minimum-replica state is not asserted here until explicitly observed.
+A separate 420-second held-WebSocket run completed 40/40 connections with zero failures and drove KEDA from its two-replica minimum to five replicas. After the clients disconnected and KEDA's cooldown plus HPA scale-down stabilization elapsed, the Deployment returned to 2/2 ready replicas. The completed-race run also observed 5/5 ready replicas, but it began while the long-run scale-down period was still active; it is not the evidence for scale-out.
 
 ## Reproduction
 
