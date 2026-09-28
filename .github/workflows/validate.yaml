@@ -129,3 +129,25 @@ jobs:
           assert json.loads(dashboard_json)["uid"] == "typescale-overview"
           assert sum(doc["kind"] == "Deployment" for doc in rendered["keda"]) == 3
           PY
+
+  terraform:
+    name: Terraform Validation
+    runs-on: ubuntu-24.04
+    defaults:
+      run:
+        working-directory: deploy/azure/terraform
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+
+      - name: Set up Terraform
+        uses: hashicorp/setup-terraform@b9cd54a3c349d3f38e8881555d616ced269862dd # v3
+        with:
+          terraform_version: 1.16.3
+          terraform_wrapper: false
+
+      - name: Format and validate Terraform
+        run: |
+          terraform fmt -check -recursive
+          terraform init -backend=false -input=false
+          terraform validate
