@@ -63,6 +63,12 @@ resource "azurerm_container_app_environment" "typescale" {
   location            = var.container_location
   resource_group_name = azurerm_resource_group.typescale.name
   # Omitting Log Analytics keeps this short-lived test on streamed logs only.
+
+  # Azure injects an implicit Consumption profile into the environment;
+  # the provider reports it in state but does not export it as configuration.
+  lifecycle {
+    ignore_changes = [workload_profile]
+  }
 }
 
 resource "azurerm_managed_redis" "typescale" {
@@ -86,6 +92,7 @@ resource "azurerm_container_app" "typescale" {
   resource_group_name          = azurerm_resource_group.typescale.name
   container_app_environment_id = azurerm_container_app_environment.typescale.id
   revision_mode                = "Single"
+  workload_profile_name        = "Consumption"
 
   secret {
     name  = "redis-url"
@@ -121,6 +128,16 @@ resource "azurerm_container_app" "typescale" {
   }
 
   tags = azurerm_resource_group.typescale.tags
+
+  # Azure normalizes these optional fields to zero/implicit latest-revision traffic;
+  # keep provider-generated defaults from creating a perpetual update plan.
+  lifecycle {
+    ignore_changes = [
+      template[0].cooldown_period_in_seconds,
+      template[0].polling_interval_in_seconds,
+      ingress[0].traffic_weight,
+    ]
+  }
 }
 
 output "resource_group_name" {
