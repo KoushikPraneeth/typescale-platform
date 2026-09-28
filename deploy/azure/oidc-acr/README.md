@@ -27,7 +27,7 @@ Create the repository environment named `azure-demo`, then add the Terraform out
 - `AZURE_ACR_NAME`
 - `AZURE_ACR_LOGIN_SERVER`
 
-The workflow runs only on `workflow_dispatch` in that environment, requests a short-lived OIDC token, imports the already-tested immutable GHCR image by pulling and retagging it, pushes to ACR, reads the registry digest, and pulls back by that digest. The registry tag is the GitHub commit SHA; the digest is the immutable deployment reference.
+The federated credential uses GitHub's immutable owner/repository IDs in its subject claim, as configured for this repository. The `azure-demo` environment is part of that subject, so only jobs explicitly bound to that environment can request Azure tokens. The manually dispatched workflow requests a short-lived OIDC token, pulls and retags the tested immutable GHCR image, pushes it to ACR, reads the registry digest, and pulls back by that digest. The GitHub commit SHA is the tag; the digest is the immutable deployment reference.
 
 Verify the workflow summary and the manifest digest in ACR. This workflow proves OIDC-authenticated image publication only; it does not deploy a Container App using the ACR digest.
 
