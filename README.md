@@ -5,7 +5,7 @@ GitOps and infrastructure configuration for [TypeScale](https://github.com/Koush
 ## Environment boundaries
 
 - **OrbStack Kubernetes** is the primary runtime for TypeScale, Argo CD, monitoring, and autoscaling.
-- **Azure and Floci are intentionally out of scope for this milestone.** No cloud deployment is created or required.
+- **Azure is a temporary validation path, not the permanent runtime.** The staged Container Apps run and its teardown evidence are recorded in [`docs/benchmarks/azure-container-apps.md`](docs/benchmarks/azure-container-apps.md). AKS cloud validation and Terraform automation remain separate future milestones.
 
 ## Repository layout
 
