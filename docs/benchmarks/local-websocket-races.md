@@ -46,7 +46,7 @@ A separate 420-second held-WebSocket run completed 40/40 connections with zero f
 | Matchmaking latency, p95 | 19.275 ms |
 | Matchmaking latency, p99 | 91.158 ms |
 
-This was a short completed-race run, not a sustained-load or scale-out measurement. The 420-second held-connection run above remains the evidence for KEDA scale-up and return to minimum; active socket continuity during pod replacement is not guaranteed and is documented separately.
+The completed-race run is still a short synthetic test, not sustained-load evidence. During the v1.0.0 run, the HPA recorded scale-up from the two-replica baseline to five while the external WebSocket metric exceeded target; after the metric returned to zero, it scaled down 5→4→3→2. Final verification showed 2/2 ready replicas and `ScaledObject Ready=True`, `Active=False`, `Fallback=False`. The separate 420-second held-WebSocket run remains the sustained-connection test. Active socket continuity during pod replacement is not guaranteed and is documented separately.
 
 ## Reproduction
 
