@@ -176,6 +176,12 @@ jobs:
           assert sum(doc["kind"] == "Deployment" for doc in rendered["keda"]) == 3
           PY
 
+      - name: Verify AKS image supports the configured ARM64 node
+        run: |
+          IMAGE_REF="$(python3 -c "import yaml; i=yaml.safe_load(open('charts/typescale/values-aks.yaml'))['app']['image']; print(i['repository']+'@'+i['digest'])")"
+          docker pull --platform=linux/arm64 "$IMAGE_REF" >/dev/null
+          test "$(docker image inspect --format '{{.Os}}/{{.Architecture}}' "$IMAGE_REF")" = "linux/arm64"
+
   terraform:
     name: Terraform Validation
     runs-on: ubuntu-24.04

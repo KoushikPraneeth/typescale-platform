@@ -48,9 +48,9 @@ variable "admin_source_cidr" {
 }
 
 variable "node_vm_size" {
-  description = "Single initial AKS node size; verify Student subscription quota and regional availability before apply."
+  description = "ARM64 Dpsv5 AKS system-node size available to the Student subscription; recheck regional quota before apply."
   type        = string
-  default     = "Standard_D2s_v5"
+  default     = "Standard_D2pds_v5"
 }
 
 variable "ssh_public_key_path" {
