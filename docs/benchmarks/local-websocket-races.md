@@ -27,6 +27,27 @@ Latency is measured from `join_sent_at` to `room_joined_at`; it is not end-to-en
 
 A separate 420-second held-WebSocket run completed 40/40 connections with zero failures and drove KEDA from its two-replica minimum to five replicas. After the clients disconnected and KEDA's cooldown plus HPA scale-down stabilization elapsed, the Deployment returned to 2/2 ready replicas. The completed-race run also observed 5/5 ready replicas, but it began while the long-run scale-down period was still active; it is not the evidence for scale-out.
 
+## v1.0.0 release revalidation (2026-09-29 local)
+
+- App/API version: `1.0.0`; deployed immutable image digest: `sha256:7e85ebde40f4797316bb381b52d371c7b800888ccda125b221cb41008e337cd6`.
+- GitOps deployment: 2/2 ready replicas; Argo CD Applications were `Synced` and `Healthy`; `/health/ready` returned `ok`; `/openapi.json` reported `1.0.0`.
+- Re-ran 40 WebSocket clients through `kubectl port-forward` with `--complete-races` and a 5-second ramp; all clients joined and finished the race, with no connection failures or unexpected disconnects.
+
+| Measure | v1.0.0 revalidation |
+|---|---:|
+| WebSocket clients attempted | 40 |
+| Successful connections | 40 / 40 (100%) |
+| Failed connections | 0 |
+| Unexpected post-join disconnects | 0 |
+| Players joined | 40 / 40 |
+| Race completion | 40 / 40 (100%) |
+| Peak concurrent WebSockets | 40 |
+| Matchmaking latency, p50 | 3.971 ms |
+| Matchmaking latency, p95 | 19.275 ms |
+| Matchmaking latency, p99 | 91.158 ms |
+
+This was a short completed-race run, not a sustained-load or scale-out measurement. The 420-second held-connection run above remains the evidence for KEDA scale-up and return to minimum; active socket continuity during pod replacement is not guaranteed and is documented separately.
+
 ## Reproduction
 
 From `typescale-app` with the load-test dependencies installed and the local service port-forwarded to `127.0.0.1:8000`:

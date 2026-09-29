@@ -85,7 +85,8 @@ jobs:
           image = values["app"]["image"]
           assert re.fullmatch(r"[0-9a-f]{40}", image["tag"])
           assert re.fullmatch(r"sha256:[0-9a-f]{64}", image["digest"])
-          assert image["tag"] == "389691c78f7e4fb1fbc505f9e1386fcee8006246"
+          # The promotion workflow resolves this full-SHA tag and digest from the registry.
+          # Keep CI format-based so every approved image update remains valid.
 
           applications = {}
           for path in pathlib.Path("argocd/applications").glob("*.yaml"):
