@@ -1,11 +1,11 @@
 # Temporary AKS TypeScale lab
 
-This stack is a disposable AKS/ACR environment for the v1.1 Kubernetes-specific proof described in the project plan. It is not a production cluster and must not be left running.
+This stack is a disposable AKS/ACR environment for the Kubernetes-specific portfolio validation. It is not a production cluster and must not be left running.
 
 ## Architecture and guardrails
 
 - One dedicated resource group, one AKS cluster, one small Basic ACR, and no Azure Managed Redis. TypeScale's Redis remains an in-cluster `ClusterIP`, with the chart NetworkPolicy allowing Redis ingress only from the app pods.
-- AKS starts with one `Standard_D2s_v5` node and a cluster autoscaler range of one to two nodes. The AKS **Free control-plane tier does not make worker VMs or networking free**.
+- AKS starts with one ARM64 `Standard_D2pds_v5` node and a cluster autoscaler range of one to two nodes. This Dpsv5 SKU is listed in Microsoft's AKS Arm64 guidance and was available to the current Student subscription in Canada Central; recheck quota/capacity before every apply. The AKS **Free control-plane tier does not make worker VMs or networking free**.
 - Public AKS API is restricted to one required operator IPv4 `/32`; local Kubernetes accounts are disabled and Azure RBAC is used. The app is the only public service. Prometheus, Grafana, Argo CD, KEDA, and Redis stay `ClusterIP`/cluster-internal.
 - ACR admin credentials are disabled. AKS kubelet managed identity receives only registry-scoped `AcrPull`; no registry password is stored in a Kubernetes Secret.
 - Terraform tags every resource for TypeScale/demo cleanup. Terraform state and plan files can contain credential/configuration material and must remain local, ignored, and outside GitHub.
@@ -19,7 +19,7 @@ This stack is a disposable AKS/ACR environment for the v1.1 Kubernetes-specific 
 4. Verify `ssh_public_key_path` resolves to a public `.pub` key. Never pass a private key.
 5. Review the exact Terraform plan. It must contain one RG, one Basic ACR, one AKS cluster, and the expected scoped role assignments; no managed Redis, Log Analytics workspace, or unrelated resources.
 
-For rough planning only, the Azure Retail Prices API returned Canada Central list rates of USD 0.107/node-hour for Linux `Standard_D2s_v5`, USD 0.1666/day for Basic ACR, USD 0.025/hour for the Standard Load Balancer, and USD 10.208/month for a P6 64-GiB Premium SSD. At one node, those components subtotal about USD 0.75 for four hours or USD 1.04 for six hours, before public IP, bandwidth/egress, taxes, possible SKU differences, or any second node. This is **not** the account's actual charge or credit balance and is not an enforceable cap; verify the current Student credit and Cost Management data in the Portal before apply. The second node adds at least another VM-hour and disk usage while running.
+For rough planning only, the Azure Retail Prices API returned Canada Central list rates of USD 0.101/node-hour for Linux `Standard_D2pds_v5`, USD 0.1666/day for Basic ACR, USD 0.025/hour for the Standard Load Balancer, and USD 10.208/month for a P6 64-GiB Premium SSD. At one node, those components subtotal about USD 0.73 for four hours or USD 1.01 for six hours, before public IP, bandwidth/egress, taxes, possible SKU differences, or any second node. This is **not** the account's actual charge or credit balance and is not an enforceable cap; verify the current Student credit and Cost Management data in the Portal before apply. The second node adds at least another VM-hour and disk usage while running.
 
 ## Provision and authenticate
 
@@ -55,15 +55,17 @@ If the machine's egress IP changes, update the `/32` allowlist through Terraform
 
 ## Publish/pull the tested image
 
-Import the already-tested immutable GHCR image to the temporary ACR (no rebuild, no mutable `latest` tag), record the ACR digest, and verify it matches the source digest:
+Import the separately built, tested, Trivy-scanned immutable ARM64 GHCR image to the temporary ACR (no mutable `latest` tag). The original v1.0.0 release digest is AMD64-only and is not compatible with the ARM64 node. Record the ACR digest and verify the imported manifest is ARM64; do not assume the registry copy must retain the source digest:
 
 ```sh
 az acr import --name "$ACR_NAME" \
-  --source ghcr.io/koushikpraneeth/typescale@sha256:7e85ebde40f4797316bb381b52d371c7b800888ccda125b221cb41008e337cd6 \
+  --source ghcr.io/koushikpraneeth/typescale@sha256:a30631e0fc93269a7d408c7a20c96a6f32c4bd48759fbf78cf13ff803d1b4b27 \
   --image typescale:056cb02da9a856793f29796526f5916207d59a04
 ```
 
-The committed AKS values use the tested GHCR digest so the repository remains reproducible after the temporary ACR is destroyed. For the live ACR-backed run, use a disposable Git branch: update `app.image.repository`/`digest` in `values-aks.yaml` to the imported ACR image and update the AKS bootstrap plus its child Applications to track that branch. Push the branch before applying the bootstrap so Argo CD observes the exact branch and digest. Do not merge an ACR-specific image reference into `main`; after AKS is destroyed, delete the temporary branch. This keeps the cluster GitOps-managed without leaving the permanent repo pointed at a registry that no longer exists.
+The ARM64 artifact was built from the exact `v1.0.0` source commit by the app repository's manually dispatched **AKS ARM64 image** workflow. That workflow runs the app tests and Node syntax check on a native ARM64 runner, builds `linux/arm64`, gates publication on the HIGH/CRITICAL Trivy scan, and emits the immutable image digest. The existing v1.0.0 release tag and AMD64 digest remain unchanged.
+
+The committed AKS values use the tested ARM64 GHCR digest so the repository remains reproducible after the temporary ACR is destroyed; this chart is intended for the ARM64 Dpsv5 node size configured in Terraform. For the live ACR-backed run, use a disposable Git branch: update `app.image.repository`/`digest` in `values-aks.yaml` to the imported ACR image and update the AKS bootstrap plus its child Applications to track that branch. Push the branch before applying the bootstrap so Argo CD observes the exact branch and digest. Do not merge an ACR-specific image reference into `main`; after AKS is destroyed, delete the temporary branch. This keeps the cluster GitOps-managed without leaving the permanent repo pointed at a registry that no longer exists.
 
 ## GitOps bootstrap and verification
 

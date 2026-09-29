@@ -40,17 +40,18 @@ variable "kubernetes_version" {
 variable "admin_source_cidr" {
   description = "Current operator's public IPv4 egress address in /32 CIDR form; restricts the AKS API server."
   type        = string
+  sensitive   = true
 
   validation {
-    condition     = can(cidrhost(var.admin_source_cidr, 0)) && can(regex("/32$", var.admin_source_cidr))
+    condition     = can(cidrnetmask(var.admin_source_cidr)) && can(cidrhost(var.admin_source_cidr, 0)) && can(regex("/32$", var.admin_source_cidr))
     error_message = "admin_source_cidr must be a valid IPv4 /32 address range."
   }
 }
 
 variable "node_vm_size" {
-  description = "Single initial AKS node size; verify Student subscription quota and regional availability before apply."
+  description = "ARM64 Dpsv5 AKS system-node size available to the Student subscription; recheck regional quota before apply."
   type        = string
-  default     = "Standard_D2s_v5"
+  default     = "Standard_D2pds_v5"
 }
 
 variable "ssh_public_key_path" {

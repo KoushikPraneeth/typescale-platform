@@ -1,14 +1,14 @@
-# AKS keeps the app public and all control/metrics/state services private.
-# The committed baseline uses the tested GHCR digest so this file remains
-# reproducible after the temporary ACR and AKS resources are destroyed.
-# For the live ACR pull test, change only repository/digest on the temporary
-# deployment branch, observe Argo CD sync, and revert the override after teardown.
+# AKS uses the ARM64 Standard_D2pds_v5 node available to the Student subscription.
+# This immutable ARM64 GHCR image was built/tested from the v1.0.0 source commit;
+# the original release digest is AMD64 and must not be scheduled on this node.
+# For the ACR pull test, change only repository/digest on the temporary branch,
+# observe Argo CD sync, and revert the override after teardown.
 app:
   replicaCount: 2
   image:
     repository: ghcr.io/koushikpraneeth/typescale
     tag: 056cb02da9a856793f29796526f5916207d59a04
-    digest: sha256:7e85ebde40f4797316bb381b52d371c7b800888ccda125b221cb41008e337cd6
+    digest: sha256:a30631e0fc93269a7d408c7a20c96a6f32c4bd48759fbf78cf13ff803d1b4b27
     pullPolicy: IfNotPresent
   namespacePrefix: typescale:aks
   metrics:
