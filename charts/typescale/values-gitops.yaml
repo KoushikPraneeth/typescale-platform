@@ -2,8 +2,8 @@ app:
   replicaCount: 2
   image:
     repository: ghcr.io/koushikpraneeth/typescale
-    tag: 5abe5957d695932119da75bb2617a1d89965a54a
-    digest: sha256:9048dceab6f278aa7098ba9239fcb8a80e26bc8423fdccc8f69e8876e4df2533
+    tag: 056cb02da9a856793f29796526f5916207d59a04
+    digest: sha256:7e85ebde40f4797316bb381b52d371c7b800888ccda125b221cb41008e337cd6
     pullPolicy: IfNotPresent
   namespacePrefix: typescale:gitops
   metrics:
