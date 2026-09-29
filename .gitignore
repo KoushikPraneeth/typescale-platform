@@ -5,6 +5,9 @@
 *.tfstate
 *.tfstate.*
 *.tfplan
+*.tfvars
+*.tfvars.json
+*.auto.tfvars
 .terraform/
 *.tgz
 secrets/

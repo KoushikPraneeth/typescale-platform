@@ -1,0 +1,46 @@
+# AKS keeps the app public and all control/metrics/state services private.
+# The committed baseline uses the tested GHCR digest so this file remains
+# reproducible after the temporary ACR and AKS resources are destroyed.
+# For the live ACR pull test, change only repository/digest on the temporary
+# deployment branch, observe Argo CD sync, and revert the override after teardown.
+app:
+  replicaCount: 2
+  image:
+    repository: ghcr.io/koushikpraneeth/typescale
+    tag: 056cb02da9a856793f29796526f5916207d59a04
+    digest: sha256:7e85ebde40f4797316bb381b52d371c7b800888ccda125b221cb41008e337cd6
+    pullPolicy: IfNotPresent
+  namespacePrefix: typescale:aks
+  metrics:
+    enabled: true
+    path: /metrics
+    port: 9090
+    allowedNamespace: monitoring
+  autoscaling:
+    enabled: true
+    minReplicaCount: 2
+    maxReplicaCount: 5
+    pollingInterval: 15
+    cooldownPeriod: 300
+    fallback:
+      failureThreshold: 3
+      replicas: 5
+      behavior: static
+    prometheus:
+      serverAddress: http://prometheus-server.monitoring.svc.cluster.local
+      jobName: typescale-pods
+      query: ""
+      threshold: "8"
+      activationThreshold: "1"
+  publicService:
+    enabled: true
+    type: LoadBalancer
+    port: 80
+
+redis:
+  replicaCount: 1
+  service:
+    port: 6379
+
+networkPolicy:
+  enabled: true
