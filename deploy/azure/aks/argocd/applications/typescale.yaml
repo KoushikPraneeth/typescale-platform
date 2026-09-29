@@ -1,0 +1,46 @@
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: typescale
+  namespace: argocd
+  annotations:
+    argocd.argoproj.io/sync-wave: "1"
+  finalizers:
+    - resources-finalizer.argocd.argoproj.io
+spec:
+  project: default
+  source:
+    repoURL: https://github.com/KoushikPraneeth/typescale-platform.git
+    targetRevision: main
+    path: charts/typescale
+    helm:
+      releaseName: typescale
+      valueFiles:
+        - values-aks.yaml
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: typescale-gitops
+  ignoreDifferences:
+    - group: apps
+      kind: Deployment
+      name: typescale-app
+      jsonPointers:
+        - /spec/replicas
+  syncPolicy:
+    automated:
+      enabled: true
+      prune: true
+      selfHeal: true
+      allowEmpty: false
+    retry:
+      limit: 5
+      backoff:
+        duration: 5s
+        factor: 2
+        maxDuration: 1m
+    syncOptions:
+      - CreateNamespace=true
+      - PruneLast=true
+      - RespectIgnoreDifferences=true
+      - ServerSideApply=true
+  revisionHistoryLimit: 3

@@ -33,10 +33,15 @@ jobs:
       - name: Render platform releases
         run: |
           helm lint --strict charts/typescale -f charts/typescale/values-gitops.yaml
+          helm lint --strict charts/typescale -f charts/typescale/values-aks.yaml
           helm template typescale charts/typescale \
             --namespace typescale-gitops \
             -f charts/typescale/values-gitops.yaml \
             > /tmp/typescale.yaml
+          helm template typescale-aks charts/typescale \
+            --namespace typescale-gitops \
+            -f charts/typescale/values-aks.yaml \
+            > /tmp/typescale-aks.yaml
           helm template prometheus prometheus-community/prometheus \
             --version 29.31.1 \
             --namespace monitoring \
@@ -60,12 +65,14 @@ jobs:
               ghcr.io/yannh/kubeconform:v0.7.0@sha256:85dbef6b4b312b99133decc9c6fc9495e9fc5f92293d4ff3b7e1b30f5611823c \
               -strict -summary -kubernetes-version 1.31.0 - < "$manifest"
           done
-          docker run --rm -i \
-            ghcr.io/yannh/kubeconform:v0.7.0@sha256:85dbef6b4b312b99133decc9c6fc9495e9fc5f92293d4ff3b7e1b30f5611823c \
-            -strict -summary -kubernetes-version 1.31.0 \
-            -schema-location default \
-            -schema-location 'https://raw.githubusercontent.com/datreeio/CRDs-catalog/ad3b08c5045129d7bb1eeffd8e61719b2c8dd1e2/{{.Group}}/{{.ResourceKind}}_{{.ResourceAPIVersion}}.json' \
-            - < /tmp/typescale.yaml
+          for manifest in /tmp/typescale.yaml /tmp/typescale-aks.yaml; do
+            docker run --rm -i \
+              ghcr.io/yannh/kubeconform:v0.7.0@sha256:85dbef6b4b312b99133decc9c6fc9495e9fc5f92293d4ff3b7e1b30f5611823c \
+              -strict -summary -kubernetes-version 1.31.0 \
+              -schema-location default \
+              -schema-location 'https://raw.githubusercontent.com/datreeio/CRDs-catalog/ad3b08c5045129d7bb1eeffd8e61719b2c8dd1e2/{{.Group}}/{{.ResourceKind}}_{{.ResourceAPIVersion}}.json' \
+              - < "$manifest"
+          done
           docker run --rm -i \
             ghcr.io/yannh/kubeconform:v0.7.0@sha256:85dbef6b4b312b99133decc9c6fc9495e9fc5f92293d4ff3b7e1b30f5611823c \
             -strict -summary -kubernetes-version 1.31.0 \
@@ -101,6 +108,23 @@ jobs:
           assert applications["grafana"]["spec"]["sources"][0]["targetRevision"] == "13.2.5"
           assert applications["keda"]["spec"]["sources"][0]["targetRevision"] == "2.20.2"
           typescale_app = applications["typescale"]
+
+          aks_root = yaml.safe_load(open("deploy/azure/aks/argocd/bootstrap.yaml"))
+          assert aks_root["kind"] == "Application"
+          assert aks_root["metadata"]["name"] == "typescale-aks-bootstrap"
+          assert aks_root["spec"]["source"]["path"] == "deploy/azure/aks/argocd/applications"
+          aks_applications = {}
+          for path in pathlib.Path("deploy/azure/aks/argocd/applications").glob("*.yaml"):
+              application = yaml.safe_load(path.read_text())
+              assert application["apiVersion"] == "argoproj.io/v1alpha1"
+              assert application["kind"] == "Application"
+              assert application["spec"]["syncPolicy"]["automated"]["prune"] is True
+              assert application["spec"]["syncPolicy"]["automated"]["selfHeal"] is True
+              sources = application["spec"].get("sources", [application["spec"].get("source", {})])
+              assert all(source.get("targetRevision") == "main" for source in sources if source.get("repoURL", "").endswith("typescale-platform.git"))
+              aks_applications[application["metadata"]["name"]] = application
+          assert set(aks_applications) == {"grafana", "keda", "prometheus", "typescale"}
+          assert aks_applications["typescale"]["spec"]["source"]["path"] == "charts/typescale"
           assert "RespectIgnoreDifferences=true" in typescale_app["spec"]["syncPolicy"]["syncOptions"]
           assert typescale_app["spec"]["ignoreDifferences"] == [{"group": "apps", "kind": "Deployment", "name": "typescale-app", "jsonPointers": ["/spec/replicas"]}]
 
@@ -114,6 +138,27 @@ jobs:
           assert {entry["name"]: entry.get("value") for entry in container["env"]}["METRICS_PORT"] == "9090"
           assert scaled_object["spec"]["minReplicaCount"] == 2
           assert scaled_object["spec"]["maxReplicaCount"] == 5
+
+          aks_values = yaml.safe_load(open("charts/typescale/values-aks.yaml"))
+          aks_image = aks_values["app"]["image"]
+          assert re.fullmatch(r"[0-9a-f]{40}", aks_image["tag"])
+          assert re.fullmatch(r"sha256:[0-9a-f]{64}", aks_image["digest"])
+          assert aks_values["app"]["autoscaling"]["minReplicaCount"] == 2
+          assert aks_values["app"]["autoscaling"]["maxReplicaCount"] == 5
+          assert aks_values["app"]["publicService"]["enabled"] is True
+          assert aks_values["app"]["publicService"]["type"] == "LoadBalancer"
+          assert aks_values["networkPolicy"]["enabled"] is True
+          with open("/tmp/typescale-aks.yaml") as stream:
+              aks_resources = [doc for doc in yaml.safe_load_all(stream) if doc]
+          aks_scaled_object = next(doc for doc in aks_resources if doc["kind"] == "ScaledObject")
+          aks_deployment = next(doc for doc in aks_resources if doc["kind"] == "Deployment" and doc["metadata"]["labels"].get("app.kubernetes.io/component") == "application")
+          assert "replicas" not in aks_deployment["spec"]
+          assert aks_deployment["spec"]["template"]["spec"]["containers"][0]["image"] == f'{aks_image["repository"]}@{aks_image["digest"]}'
+          assert aks_scaled_object["spec"]["minReplicaCount"] == 2
+          assert aks_scaled_object["spec"]["maxReplicaCount"] == 5
+          aks_services = [doc for doc in aks_resources if doc["kind"] == "Service"]
+          assert sum(doc["spec"].get("type", "ClusterIP") == "LoadBalancer" for doc in aks_services) == 1
+          assert all(doc["spec"].get("type", "ClusterIP") == "ClusterIP" for doc in aks_services if doc["metadata"]["labels"].get("app.kubernetes.io/component") == "redis")
 
           rendered = {}
           for name in ("prometheus", "grafana", "keda"):
@@ -159,6 +204,28 @@ jobs:
     defaults:
       run:
         working-directory: deploy/azure/oidc-acr
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+
+      - name: Set up Terraform
+        uses: hashicorp/setup-terraform@b9cd54a3c349d3f38e8881555d616ced269862dd # v3
+        with:
+          terraform_version: 1.16.3
+          terraform_wrapper: false
+
+      - name: Format and validate Terraform
+        run: |
+          terraform fmt -check -recursive
+          terraform init -backend=false -input=false
+          terraform validate
+
+  terraform_aks:
+    name: Terraform AKS Validation
+    runs-on: ubuntu-24.04
+    defaults:
+      run:
+        working-directory: deploy/azure/aks/terraform
     steps:
       - name: Checkout repository
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
